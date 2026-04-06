@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>영원한 리허설</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #f4f4f1;
+      color: #111;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #overlay {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      z-index: 10;
+      width: min(360px, calc(100vw - 36px));
+      pointer-events: none;
+    }
+
+    .title {
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+
+    .desc {
+      font-size: 12px;
+      line-height: 1.6;
+      max-width: 320px;
+      opacity: 0.82;
+    }
+
+    .status {
+      margin-top: 14px;
+      font-size: 11px;
+      line-height: 1.7;
+      opacity: 0.9;
+      white-space: pre-line;
+    }
+
+    .hint {
+      position: fixed;
+      bottom: 18px;
+      left: 18px;
+      font-size: 11px;
+      opacity: 0.65;
+      z-index: 10;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div class="title">영원한 리허설 / perpetual rehearsal</div>
+    <div class="desc">
+      도장은 계속 종이를 향해 내려오지만, 마지막 순간에 멈추고 다시 올라갑니다.<br>
+      실패라기보다, 완료 직전으로 되돌아가는 연습의 구조입니다.
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="hint">click: 시작 유도 / space: 압박하기 / r: 흔적 초기화</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+  <script>
+    let paperY;
+    let stampX;
+    let topY;
+    let currentY;
+    let targetDepth;
+    let velocity = 0;
+    let phase = 'idle';
+    let phaseFrame = 0;
+    let marks = [];
+    let resetCount = 0;
+    let successCount = 0;
+    let pressure = 0;
+    let cycleSeed = 0;
+    let guideAlpha = 0;
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      rectMode(CENTER);
+      textFont('Helvetica Neue, Arial, sans-serif');
+      initializeScene();
+    }
+
+    function initializeScene() {
+      stampX = width * 0.5;
+      topY = height * 0.18;
+      currentY = topY;
+      paperY = height * 0.72;
+      targetDepth = paperY - 90;
+      phase = 'idle';
+      phaseFrame = 0;
+      velocity = 0;
+      pressure = 0;
+      cycleSeed = random(1000);
+    }
+
+    function draw() {
+      background(244, 244, 241);
+      drawPaper();
+      updateSystem();
+      drawMechanism();
+      drawMarks();
+      drawUI();
+    }
+
+    function updateSystem() {
+      phaseFrame++;
+      pressure = keyIsDown(32) ? min(1, pressure + 0.02) : max(0, pressure - 0.03);
+
+      if (phase === 'idle') {
+        guideAlpha = lerp(guideAlpha, 1, 0.05);
+      } else {
+        guideAlpha = lerp(guideAlpha, 0, 0.08);
+      }
+
+      if (phase === 'descending') {
+        let desired = targetDepth + sin(frameCount * 0.06 + cycleSeed) * 8;
+        currentY = lerp(currentY, desired, 0.07 + pressure * 0.04);
+
+        let distanceToPaper = (paperY - 24) - currentY;
+
+        if (distanceToPaper < 42) {
+          phase = 'hesitate';
+          phaseFrame = 0;
+        }
+      }
+
+      else if (phase === 'hesitate') {
+        let shake = sin(frameCount * 0.8) * (4 + pressure * 8);
+        currentY = (paperY - 24) - 40 + shake;
+
+        if (phaseFrame % 18 === 0) {
+          marks.push({
+            x: stampX + random(-36, 36),
+            y: paperY + random(-6, 6),
+            a: random(18, 35),
+            s: random(16, 30),
+            type: 'ghost'
+          });
+        }
+
+        if (phaseFrame > 45 + random(10, 40)) {
+          let rareSuccessChance = 0.03 + pressure * 0.07;
+          if (random() < rareSuccessChance) {
+            phase = 'imprint';
+            phaseFrame = 0;
+          } else {
+            phase = 'reset';
+            phaseFrame = 0;
+            resetCount++;
+          }
+        }
+      }
+
+      else if (phase === 'imprint') {
+        currentY = lerp(currentY, paperY - 16, 0.22);
+        if (phaseFrame === 4) {
+          marks.push({
+            x: stampX,
+            y: paperY,
+            a: 110,
+            s: 54,
+            type: 'solid'
+          });
+          successCount++;
+        }
+        if (phaseFrame > 10) {
+          phase = 'reset';
+          phaseFrame = 0;
+        }
+      }
+
+      else if (phase === 'reset') {
+        currentY = lerp(currentY, topY, 0.14);
+        if (abs(currentY - topY) < 1.2) {
+          currentY = topY;
+          phase = 'idle';
+          phaseFrame = 0;
+          cycleSeed = random(1000);
+        }
+      }
+
+      for (let i = marks.length - 1; i >= 0; i--) {
+        marks[i].a *= 0.997;
+        if (marks[i].a < 2) marks.splice(i, 1);
+      }
+    }
+
+    function drawPaper() {
+      stroke(120);
+      strokeWeight(1);
+      noFill();
+      rect(width * 0.5, paperY, min(width * 0.74, 760), min(height * 0.28, 220));
+
+      let left = width * 0.5 - min(width * 0.74, 760) / 2;
+      let right = width * 0.5 + min(width * 0.74, 760) / 2;
+      for (let y = paperY - 72; y <= paperY + 72; y += 18) {
+        stroke(210);
+        line(left + 24, y, right - 24, y);
+      }
+    }
+
+    function drawMechanism() {
+      let armTop = 50;
+      let armBottom = currentY - 48;
+      stroke(30);
+      strokeWeight(1.2);
+      line(stampX, armTop, stampX, armBottom);
+      line(stampX - 26, armTop, stampX + 26, armTop);
+
+      noFill();
+      rect(stampX, currentY, 88, 96, 6);
+      line(stampX - 24, currentY - 30, stampX + 24, currentY - 30);
+      line(stampX - 24, currentY, stampX + 24, currentY);
+      line(stampX - 24, currentY + 30, stampX + 24, currentY + 30);
+
+      if (phase === 'hesitate') {
+        line(stampX - 50, currentY - 12, stampX - 68, currentY - 12 + sin(frameCount * 0.8) * 6);
+        line(stampX + 50, currentY + 12, stampX + 68, currentY + 12 - sin(frameCount * 0.8) * 6);
+      }
+
+      noFill();
+      rect(stampX, currentY + 58, 54, 18, 2);
+
+      stroke(120, guideAlpha * 120);
+      line(stampX - 70, paperY - 24, stampX + 70, paperY - 24);
+    }
+
+    function drawMarks() {
+      noStroke();
+      for (let m of marks) {
+        fill(20, m.a);
+        if (m.type === 'solid') {
+          rect(m.x, m.y, m.s, m.s * 0.72, 2);
+          fill(244, 244, 241, m.a * 0.8);
+          textAlign(CENTER, CENTER);
+          textSize(10);
+          text('START', m.x, m.y + 1);
+        } else {
+          push();
+          translate(m.x, m.y);
+          rotate(random(-0.04, 0.04));
+          noFill();
+          stroke(20, m.a);
+          rect(0, 0, m.s, m.s * 0.65, 2);
+          pop();
+        }
+      }
+    }
+
+    function drawUI() {
+      let stateText = {
+        idle: '대기 중',
+        descending: '접근 중',
+        hesitate: '머뭇거림',
+        imprint: '희미한 접촉',
+        reset: '초기화'
+      }[phase];
+
+      document.getElementById('status').textContent =
+        'state  : ' + stateText + '\n' +
+        'reset  : ' + resetCount + '\n' +
+        'imprint: ' + successCount + '\n' +
+        'pressure: ' + nf(pressure, 1, 2);
+
+      if (phase === 'idle') {
+        push();
+        textAlign(CENTER, CENTER);
+        noStroke();
+        fill(40, 40, 40, guideAlpha * 110);
+        textSize(13);
+        text('click to initiate', width * 0.5, height * 0.48);
+        pop();
+      }
+    }
+
+    function mousePressed() {
+      if (phase === 'idle') {
+        phase = 'descending';
+        phaseFrame = 0;
+        stampX = constrain(mouseX, width * 0.24, width * 0.76);
+      }
+    }
+
+    function keyPressed() {
+      if (key === 'r' || key === 'R') {
+        marks = [];
+        resetCount = 0;
+        successCount = 0;
+        initializeScene();
+      }
+      if (key === ' ' && phase === 'idle') {
+        phase = 'descending';
+        phaseFrame = 0;
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      initializeScene();
+      marks = [];
+    }
+  </script>
+</body>
+</html>
