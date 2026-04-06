@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>stamp</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f4f4f1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .stamp {
+      display: grid;
+      grid-template-columns: repeat(15, 12px);
+      gap: 2px;
+    }
+
+    .pixel {
+      width: 12px;
+      height: 12px;
+      background: #111;
+    }
+
+    .empty {
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+
+<div class="stamp">
+  <!-- 1 -->
+  <div class="pixel"></div><div class="empty"></div><div class="empty"></div><div class="pixel"></div>
+  <div class="empty"></div>
+  <div class="pixel"></div><div class="pixel"></div><div class="pixel"></div>
+  <div class="empty"></div>
+  <div class="empty"></div><div class="empty"></div><div class="pixel"></div>
+
+  <!-- 이런 식으로 계속 이어짐 (원하면 자동 생성 코드로 바꿔줄게) -->
+</div>
+
+</body>
+</html>
