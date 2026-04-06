@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>영원한 리허설</title>
+  <title>도장 타이밍 연습</title>
   <style>
     html, body {
       margin: 0;
@@ -14,39 +14,32 @@
       overflow: hidden;
     }
 
-    #overlay {
+    #ui {
       position: fixed;
       top: 18px;
       left: 18px;
       z-index: 10;
-      width: min(360px, calc(100vw - 36px));
+      font-size: 12px;
+      line-height: 1.7;
+      letter-spacing: 0.02em;
       pointer-events: none;
     }
 
     .title {
       font-size: 14px;
       letter-spacing: 0.08em;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .desc {
-      font-size: 12px;
-      line-height: 1.6;
+      opacity: 0.75;
+      margin-bottom: 10px;
       max-width: 320px;
-      opacity: 0.82;
-    }
-
-    .status {
-      margin-top: 14px;
-      font-size: 11px;
-      line-height: 1.7;
-      opacity: 0.9;
-      white-space: pre-line;
     }
 
     .hint {
       position: fixed;
-      bottom: 18px;
+      bottom: 16px;
       left: 18px;
       font-size: 11px;
       opacity: 0.65;
@@ -59,259 +52,259 @@
   </style>
 </head>
 <body>
-  <div id="overlay">
-    <div class="title">영원한 리허설 / perpetual rehearsal</div>
-    <div class="desc">
-      도장은 계속 종이를 향해 내려오지만, 마지막 순간에 멈추고 다시 올라갑니다.<br>
-      실패라기보다, 완료 직전으로 되돌아가는 연습의 구조입니다.
-    </div>
-    <div class="status" id="status"></div>
+  <div id="ui">
+    <div class="title">도장 타이밍 연습 / stamp timing practice</div>
+    <div class="desc">타이밍 바가 기준선에 들어올 때 스페이스를 눌러 도장을 찍는다. 너무 빠르거나 늦으면 실패한다.</div>
+    <div id="status"></div>
   </div>
 
-  <div class="hint">click: 시작 유도 / space: 압박하기 / r: 흔적 초기화</div>
+  <div class="hint">space: 도장 찍기 / r: 다시 시작</div>
 
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
   <script>
-    let paperY;
-    let stampX;
-    let topY;
-    let currentY;
-    let targetDepth;
-    let velocity = 0;
-    let phase = 'idle';
-    let phaseFrame = 0;
+    let laneY;
+    let targetX;
+    let barX;
+    let barW;
+    let barSpeed;
+    let score;
+    let misses;
+    let combo;
+    let lastResult = 'READY';
+    let flashTimer = 0;
     let marks = [];
-    let resetCount = 0;
-    let successCount = 0;
-    let pressure = 0;
-    let cycleSeed = 0;
-    let guideAlpha = 0;
+    let started = false;
+    let passCount = 0;
 
     function setup() {
       createCanvas(windowWidth, windowHeight);
-      rectMode(CENTER);
       textFont('Helvetica Neue, Arial, sans-serif');
-      initializeScene();
+      resetGame();
     }
 
-    function initializeScene() {
-      stampX = width * 0.5;
-      topY = height * 0.18;
-      currentY = topY;
-      paperY = height * 0.72;
-      targetDepth = paperY - 90;
-      phase = 'idle';
-      phaseFrame = 0;
-      velocity = 0;
-      pressure = 0;
-      cycleSeed = random(1000);
+    function resetGame() {
+      laneY = height * 0.58;
+      targetX = width * 0.72;
+      barX = width * 0.12;
+      barW = max(24, width * 0.035);
+      barSpeed = max(5.5, width * 0.008);
+      score = 0;
+      misses = 0;
+      combo = 0;
+      passCount = 0;
+      lastResult = 'READY';
+      flashTimer = 0;
+      marks = [];
+      started = true;
     }
 
     function draw() {
       background(244, 244, 241);
-      drawPaper();
-      updateSystem();
-      drawMechanism();
+      drawGrid();
+      drawLane();
+      updateBar();
+      drawTarget();
+      drawStampArea();
       drawMarks();
-      drawUI();
+      drawResultFlash();
+      updateUI();
     }
 
-    function updateSystem() {
-      phaseFrame++;
-      pressure = keyIsDown(32) ? min(1, pressure + 0.02) : max(0, pressure - 0.03);
+    function drawGrid() {
+      stroke(228);
+      strokeWeight(1);
+      for (let x = 0; x < width; x += 28) line(x, 0, x, height);
+      for (let y = 0; y < height; y += 28) line(0, y, width, y);
+    }
 
-      if (phase === 'idle') {
-        guideAlpha = lerp(guideAlpha, 1, 0.05);
-      } else {
-        guideAlpha = lerp(guideAlpha, 0, 0.08);
+    function drawLane() {
+      let left = width * 0.12;
+      let right = width * 0.88;
+
+      stroke(40);
+      strokeWeight(1.2);
+      line(left, laneY, right, laneY);
+
+      for (let x = left; x <= right; x += 40) {
+        stroke(180);
+        line(x, laneY - 10, x, laneY + 10);
       }
 
-      if (phase === 'descending') {
-        let desired = targetDepth + sin(frameCount * 0.06 + cycleSeed) * 8;
-        currentY = lerp(currentY, desired, 0.07 + pressure * 0.04);
+      noStroke();
+      fill(20);
+      rect(left, laneY - 18, 8, 36);
+      rect(right - 8, laneY - 18, 8, 36);
+    }
 
-        let distanceToPaper = (paperY - 24) - currentY;
+    function updateBar() {
+      fill(20);
+      noStroke();
+      rect(barX, laneY - 22, barW, 44, 2);
 
-        if (distanceToPaper < 42) {
-          phase = 'hesitate';
-          phaseFrame = 0;
-        }
-      }
+      barX += barSpeed;
 
-      else if (phase === 'hesitate') {
-        let shake = sin(frameCount * 0.8) * (4 + pressure * 8);
-        currentY = (paperY - 24) - 40 + shake;
-
-        if (phaseFrame % 18 === 0) {
-          marks.push({
-            x: stampX + random(-36, 36),
-            y: paperY + random(-6, 6),
-            a: random(18, 35),
-            s: random(16, 30),
-            type: 'ghost'
-          });
-        }
-
-        if (phaseFrame > 45 + random(10, 40)) {
-          let rareSuccessChance = 0.03 + pressure * 0.07;
-          if (random() < rareSuccessChance) {
-            phase = 'imprint';
-            phaseFrame = 0;
-          } else {
-            phase = 'reset';
-            phaseFrame = 0;
-            resetCount++;
-          }
-        }
-      }
-
-      else if (phase === 'imprint') {
-        currentY = lerp(currentY, paperY - 16, 0.22);
-        if (phaseFrame === 4) {
-          marks.push({
-            x: stampX,
-            y: paperY,
-            a: 110,
-            s: 54,
-            type: 'solid'
-          });
-          successCount++;
-        }
-        if (phaseFrame > 10) {
-          phase = 'reset';
-          phaseFrame = 0;
-        }
-      }
-
-      else if (phase === 'reset') {
-        currentY = lerp(currentY, topY, 0.14);
-        if (abs(currentY - topY) < 1.2) {
-          currentY = topY;
-          phase = 'idle';
-          phaseFrame = 0;
-          cycleSeed = random(1000);
-        }
-      }
-
-      for (let i = marks.length - 1; i >= 0; i--) {
-        marks[i].a *= 0.997;
-        if (marks[i].a < 2) marks.splice(i, 1);
+      if (barX > width * 0.88) {
+        misses++;
+        combo = 0;
+        passCount++;
+        lastResult = 'MISS';
+        flashTimer = 18;
+        resetBar();
       }
     }
 
-    function drawPaper() {
-      stroke(120);
+    function drawTarget() {
+      noFill();
+      stroke(20);
+      strokeWeight(2);
+      rect(targetX - 18, laneY - 32, 36, 64, 2);
+
+      stroke(20, 100);
+      line(targetX, laneY - 46, targetX, laneY + 46);
+    }
+
+    function drawStampArea() {
+      let paperX = width * 0.72;
+      let paperY = height * 0.78;
+      let paperW = min(360, width * 0.44);
+      let paperH = min(180, height * 0.18);
+
+      stroke(110);
       strokeWeight(1);
       noFill();
-      rect(width * 0.5, paperY, min(width * 0.74, 760), min(height * 0.28, 220));
+      rectMode(CENTER);
+      rect(paperX, paperY, paperW, paperH);
 
-      let left = width * 0.5 - min(width * 0.74, 760) / 2;
-      let right = width * 0.5 + min(width * 0.74, 760) / 2;
-      for (let y = paperY - 72; y <= paperY + 72; y += 18) {
-        stroke(210);
-        line(left + 24, y, right - 24, y);
-      }
-    }
-
-    function drawMechanism() {
-      let armTop = 50;
-      let armBottom = currentY - 48;
-      stroke(30);
-      strokeWeight(1.2);
-      line(stampX, armTop, stampX, armBottom);
-      line(stampX - 26, armTop, stampX + 26, armTop);
-
-      noFill();
-      rect(stampX, currentY, 88, 96, 6);
-      line(stampX - 24, currentY - 30, stampX + 24, currentY - 30);
-      line(stampX - 24, currentY, stampX + 24, currentY);
-      line(stampX - 24, currentY + 30, stampX + 24, currentY + 30);
-
-      if (phase === 'hesitate') {
-        line(stampX - 50, currentY - 12, stampX - 68, currentY - 12 + sin(frameCount * 0.8) * 6);
-        line(stampX + 50, currentY + 12, stampX + 68, currentY + 12 - sin(frameCount * 0.8) * 6);
+      stroke(215);
+      for (let y = paperY - paperH / 2 + 20; y < paperY + paperH / 2; y += 22) {
+        line(paperX - paperW / 2 + 20, y, paperX + paperW / 2 - 20, y);
       }
 
-      noFill();
-      rect(stampX, currentY + 58, 54, 18, 2);
-
-      stroke(120, guideAlpha * 120);
-      line(stampX - 70, paperY - 24, stampX + 70, paperY - 24);
+      fill(20);
+      noStroke();
+      textAlign(LEFT, CENTER);
+      textSize(11);
+      text('stamp log', paperX - paperW / 2, paperY - paperH / 2 - 18);
     }
 
     function drawMarks() {
-      noStroke();
+      rectMode(CENTER);
+      textAlign(CENTER, CENTER);
+
       for (let m of marks) {
-        fill(20, m.a);
-        if (m.type === 'solid') {
-          rect(m.x, m.y, m.s, m.s * 0.72, 2);
-          fill(244, 244, 241, m.a * 0.8);
-          textAlign(CENTER, CENTER);
-          textSize(10);
-          text('START', m.x, m.y + 1);
-        } else {
-          push();
-          translate(m.x, m.y);
-          rotate(random(-0.04, 0.04));
+        if (m.type === 'perfect') {
           noFill();
           stroke(20, m.a);
-          rect(0, 0, m.s, m.s * 0.65, 2);
-          pop();
+          strokeWeight(1.4);
+          rect(m.x, m.y, 58, 38, 2);
+          noStroke();
+          fill(20, m.a);
+          textSize(10);
+          text('STAMP', m.x, m.y + 1);
+        } else if (m.type === 'good') {
+          noFill();
+          stroke(20, m.a);
+          strokeWeight(1);
+          rect(m.x, m.y, 48, 32, 2);
+        } else {
+          stroke(20, m.a);
+          noFill();
+          ellipse(m.x, m.y, 10, 10);
         }
+        m.a -= 0.5;
       }
+
+      marks = marks.filter(m => m.a > 0);
     }
 
-    function drawUI() {
-      let stateText = {
-        idle: '대기 중',
-        descending: '접근 중',
-        hesitate: '머뭇거림',
-        imprint: '희미한 접촉',
-        reset: '초기화'
-      }[phase];
+    function drawResultFlash() {
+      if (flashTimer <= 0) return;
 
+      let txt = lastResult;
+      let alpha = map(flashTimer, 18, 0, 120, 0);
+
+      noStroke();
+      fill(20, alpha);
+      textAlign(CENTER, CENTER);
+      textSize(22);
+      text(txt, width * 0.5, height * 0.32);
+
+      flashTimer--;
+    }
+
+    function updateUI() {
       document.getElementById('status').textContent =
-        'state  : ' + stateText + '\n' +
-        'reset  : ' + resetCount + '\n' +
-        'imprint: ' + successCount + '\n' +
-        'pressure: ' + nf(pressure, 1, 2);
-
-      if (phase === 'idle') {
-        push();
-        textAlign(CENTER, CENTER);
-        noStroke();
-        fill(40, 40, 40, guideAlpha * 110);
-        textSize(13);
-        text('click to initiate', width * 0.5, height * 0.48);
-        pop();
-      }
-    }
-
-    function mousePressed() {
-      if (phase === 'idle') {
-        phase = 'descending';
-        phaseFrame = 0;
-        stampX = constrain(mouseX, width * 0.24, width * 0.76);
-      }
+        'score   : ' + score + '\n' +
+        'combo   : ' + combo + '\n' +
+        'miss    : ' + misses + '\n' +
+        'result  : ' + lastResult;
     }
 
     function keyPressed() {
       if (key === 'r' || key === 'R') {
-        marks = [];
-        resetCount = 0;
-        successCount = 0;
-        initializeScene();
+        resetGame();
+        return;
       }
-      if (key === ' ' && phase === 'idle') {
-        phase = 'descending';
-        phaseFrame = 0;
+
+      if (keyCode === 32) {
+        hitStamp();
+      }
+    }
+
+    function hitStamp() {
+      let barCenter = barX + barW / 2;
+      let distance = abs(barCenter - targetX);
+      let paperX = width * 0.72;
+      let paperY = height * 0.78;
+
+      if (distance <= 8) {
+        score += 2;
+        combo += 1;
+        lastResult = 'PERFECT';
+        marks.push({
+          x: paperX + random(-110, 110),
+          y: paperY + random(-45, 45),
+          a: 120,
+          type: 'perfect'
+        });
+      } else if (distance <= 18) {
+        score += 1;
+        combo += 1;
+        lastResult = 'GOOD';
+        marks.push({
+          x: paperX + random(-110, 110),
+          y: paperY + random(-45, 45),
+          a: 90,
+          type: 'good'
+        });
+      } else {
+        misses += 1;
+        combo = 0;
+        lastResult = 'MISS';
+        marks.push({
+          x: paperX + random(-110, 110),
+          y: paperY + random(-45, 45),
+          a: 70,
+          type: 'miss'
+        });
+      }
+
+      flashTimer = 18;
+      passCount++;
+      resetBar();
+    }
+
+    function resetBar() {
+      barX = width * 0.12;
+      if (passCount > 0 && passCount % 6 === 0) {
+        barSpeed += 0.4;
       }
     }
 
     function windowResized() {
       resizeCanvas(windowWidth, windowHeight);
-      initializeScene();
-      marks = [];
+      laneY = height * 0.58;
+      targetX = width * 0.72;
     }
   </script>
 </body>
